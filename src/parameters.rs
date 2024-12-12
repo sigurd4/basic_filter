@@ -123,16 +123,16 @@ impl PluginParameters for BasicFilterParameters
     fn load_preset_data(&self, data: &[u8])
     {
         self.filter.store(data[0], Ordering::Relaxed);
-        self.frequency.set(f32::from_le_bytes(*data[(data.len() - 12)..].split_array_ref().0));
-        self.resonance.set(f32::from_le_bytes(*data[(data.len() - 8)..].split_array_ref().0));
-        self.mix.set(f32::from_le_bytes(*data[(data.len() - 4)..].split_array_ref().0));
+        self.frequency.set(f32::from_le_bytes(*data[(data.len() - 12)..].split_first_chunk().unwrap().0));
+        self.resonance.set(f32::from_le_bytes(*data[(data.len() - 8)..].split_first_chunk().unwrap().0));
+        self.mix.set(f32::from_le_bytes(*data[(data.len() - 4)..].split_first_chunk().unwrap().0));
     }
 
     fn load_bank_data(&self, data: &[u8])
     {
         self.filter.store(data[0], Ordering::Relaxed);
-        self.frequency.set(f32::from_le_bytes(*data[(data.len() - 12)..].split_array_ref().0));
-        self.resonance.set(f32::from_le_bytes(*data[(data.len() - 8)..].split_array_ref().0));
-        self.mix.set(f32::from_le_bytes(*data[(data.len() - 4)..].split_array_ref().0));
+        self.frequency.set(f32::from_le_bytes(*data[(data.len() - 12)..].split_first_chunk().unwrap().0));
+        self.resonance.set(f32::from_le_bytes(*data[(data.len() - 8)..].split_first_chunk().unwrap().0));
+        self.mix.set(f32::from_le_bytes(*data[(data.len() - 4)..].split_first_chunk().unwrap().0));
     }
 }
