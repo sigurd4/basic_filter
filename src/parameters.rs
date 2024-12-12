@@ -86,15 +86,15 @@ impl PluginParameters for BasicFilterParameters
         }
     }
 
-    fn change_preset(&self, preset: i32) {}
+    fn change_preset(&self, _preset: i32) {}
 
     fn get_preset_num(&self) -> i32 {
         0
     }
 
-    fn set_preset_name(&self, name: String) {}
+    fn set_preset_name(&self, _name: String) {}
 
-    fn get_preset_name(&self, preset: i32) -> String {
+    fn get_preset_name(&self, _preset: i32) -> String {
         "".to_string()
     }
 

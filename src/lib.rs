@@ -1,34 +1,61 @@
-#![feature(adt_const_params)]
 #![feature(split_array)]
 
-use std::f32::EPSILON;
-use std::f32::consts::TAU;
+use core::f64::consts::FRAC_1_SQRT_2;
+use std::f64::EPSILON;
+use std::f64::consts::TAU;
 use std::sync::Arc;
 use std::sync::atomic::{Ordering, AtomicU8};
 
-use real_time_fir_iir_filters::iir::{SecondOrderFilter, IIRFilter};
+use num::Float;
+use real_time_fir_iir_filters::iir::second::{OmegaZeta, SecondOrderFilter};
+use real_time_fir_iir_filters::rtf::Rtf;
 use vst::{prelude::*, plugin_main};
 
-use self::parameters::{BasicFilterParameters};
+use self::parameters::BasicFilterParameters;
 
 pub mod parameters;
 
-const CHANGE: f32 = 0.2;
+const CHANGE: f64 = 0.2;
 
 struct BasicFilterPlugin
 {
     pub param: Arc<BasicFilterParameters>,
-    filter: [SecondOrderFilter; CHANNEL_COUNT],
-    rate: f32
+    filter: [SecondOrderFilter<f64>; CHANNEL_COUNT],
+    rate: f64
 }
 
 const CHANNEL_COUNT: usize = 2;
 
 impl BasicFilterPlugin
 {
+    fn process<F>(&mut self, buffer: &mut AudioBuffer<F>)
+    where
+        F: Float
+    {
+        let filter_type = self.param.filter.load(Ordering::Relaxed);
+        let mix = self.param.mix.get() as f64;
 
+        let omega = self.param.frequency.get() as f64*TAU;
+        let zeta = 0.5/(self.param.resonance.get() as f64 + EPSILON);
+
+        for ((input_channel, output_channel), filter) in buffer.zip()
+            .zip(self.filter.iter_mut())
+        {
+            filter.param.omega.assign(CHANGE*omega + (1.0 - CHANGE)**filter.param.omega);
+            filter.param.zeta.assign(CHANGE*zeta + (1.0 - CHANGE)**filter.param.zeta);
+
+            for (input_sample, output_sample) in input_channel.into_iter()
+                .zip(output_channel.into_iter())
+            {
+                let x = input_sample.to_f64().unwrap();
+                let y = filter.filter(self.rate, x)[filter_type as usize];
+                *output_sample = F::from(y*mix + x*(1.0 - mix)).unwrap();
+            }
+        }
+    }
 }
 
+#[allow(deprecated)]
 impl Plugin for BasicFilterPlugin
 {
     fn new(_host: HostCallback) -> Self
@@ -42,7 +69,7 @@ impl Plugin for BasicFilterPlugin
                 resonance: AtomicFloat::from(0.5f32.sqrt()),
                 mix: AtomicFloat::from(1.0)
             }),
-            filter: array_init::array_init(|_| SecondOrderFilter::new(TAU*880.0, 1.0)),
+            filter: [SecondOrderFilter::new(OmegaZeta::new(TAU*880.0, FRAC_1_SQRT_2)); CHANNEL_COUNT],
             rate: 44100.0
         }
     }
@@ -71,26 +98,29 @@ impl Plugin for BasicFilterPlugin
 
     fn set_sample_rate(&mut self, rate: f32)
     {
-        self.rate = rate;
+        self.rate = rate as f64;
     }
 
     fn process(&mut self, buffer: &mut AudioBuffer<f32>)
     {
-        let filter_type = self.param.filter.load(Ordering::Relaxed);
-        let mix = self.param.mix.get();
+        self.process(buffer)
+    }
 
-        for (c, (input_channel, output_channel)) in buffer.zip().enumerate()
+    fn process_f64(&mut self, buffer: &mut AudioBuffer<f64>)
+    {
+        self.process(buffer)
+    }
+
+    fn get_tail_size(&self) -> isize
+    {
+        2
+    }
+
+    fn suspend(&mut self)
+    {
+        for filter in self.filter.iter_mut()
         {
-            self.filter[c].omega = CHANGE*self.param.frequency.get()*TAU + (1.0 - CHANGE)*self.filter[c].omega;
-            self.filter[c].zeta = CHANGE*0.5/(self.param.resonance.get() + EPSILON) + (1.0 - CHANGE)*self.filter[c].zeta;
-
-            for (input_sample, output_sample) in input_channel.into_iter()
-                .zip(output_channel.into_iter())
-            {
-                let x = *input_sample;
-                let y = self.filter[c].filter(self.rate, x)[filter_type as usize];
-                *output_sample = y*mix + x*(1.0 - mix);
-            }
+            filter.reset()
         }
     }
 
