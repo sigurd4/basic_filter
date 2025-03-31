@@ -45,7 +45,7 @@ impl BasicFilterPlugin
         {
             filter.param.change(param, CHANGE);
 
-            for (input_sample, output_sample) in input_channel.into_iter().zip(output_channel.into_iter())
+            for (input_sample, output_sample) in input_channel.iter().zip(output_channel.iter_mut())
             {
                 let x = input_sample.to_f64().unwrap();
                 let y = filter.filter(self.rate, x).into_iter().zip(&blend).map(|(y, b)| y * *b).sum::<f64>();
@@ -89,8 +89,7 @@ impl Plugin for BasicFilterPlugin
             initial_delay: 0,
             preset_chunks: false,
             f64_precision: true,
-            silent_when_stopped: true,
-            ..Default::default()
+            silent_when_stopped: true
         }
     }
 

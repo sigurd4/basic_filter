@@ -1,4 +1,4 @@
-use core::f64::{consts::TAU, EPSILON};
+use core::f64::consts::TAU;
 
 use real_time_fir_iir_filters::param::OmegaZeta;
 use vst::{prelude::PluginParameters, util::AtomicFloat};
@@ -41,7 +41,7 @@ impl BasicFilterParameters
     }
     pub fn zeta(&self) -> f64
     {
-        0.5/(self.resonance.get() as f64 + EPSILON)
+        0.5/(self.resonance.get() as f64 + f64::EPSILON)
     }
     pub fn omega_zeta(&self) -> OmegaZeta<f64>
     {
