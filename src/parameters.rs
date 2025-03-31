@@ -1,5 +1,4 @@
 use core::f64::{consts::TAU, EPSILON};
-use std::sync::atomic::{AtomicU8, Ordering};
 
 use real_time_fir_iir_filters::param::OmegaZeta;
 use vst::{prelude::PluginParameters, util::AtomicFloat};
@@ -15,7 +14,7 @@ const MAX_RES: f32 = 20.0;
 #[derive(Debug)]
 pub struct BasicFilterParameters
 {
-    pub filter: AtomicU8,
+    pub filter: AtomicFloat,
     pub frequency: AtomicFloat,
     pub resonance: AtomicFloat,
     pub mix: AtomicFloat
@@ -25,7 +24,7 @@ impl BasicFilterParameters
 {
     pub fn store(&self, data: BasicFilterBank)
     {
-        self.filter.store(data.filter as u8, Ordering::Relaxed);
+        self.filter.set(data.filter);
         self.frequency.set(data.frequency);
         self.resonance.set(data.resonance);
         self.mix.set(data.mix);
@@ -51,6 +50,19 @@ impl BasicFilterParameters
             zeta: self.zeta()
         }
     }
+
+    pub fn blend(&self) -> [f64; 3]
+    {
+        let f = self.filter.get() as f64*2.0;
+        if f >= 1.0
+        {
+            [0.0, 2.0 - f, 1.0 - f]
+        }
+        else
+        {
+            [1.0 - f, f, 0.0]
+        }
+    }
 }
 
 impl From<BasicFilterBank> for BasicFilterParameters
@@ -59,7 +71,7 @@ impl From<BasicFilterBank> for BasicFilterParameters
     {
         let BasicFilterBank {filter, frequency, resonance, mix} = value;
         Self {
-            filter: AtomicU8::new(filter as u8),
+            filter: AtomicFloat::new(filter),
             frequency: AtomicFloat::new(frequency),
             resonance: AtomicFloat::new(resonance),
             mix: AtomicFloat::new(mix)
@@ -80,7 +92,7 @@ impl PluginParameters for BasicFilterParameters
     {
         match index
         {
-            0 => "".to_string(),
+            0 => "%".to_string(),
             1 => "Hz".to_string(),
             2 => "".to_string(),
             3 => "%".to_string(),
@@ -92,13 +104,7 @@ impl PluginParameters for BasicFilterParameters
     {
         match index
         {
-            0 => match self.filter.load(Ordering::Relaxed)
-            {
-                0 => "Low-pass".to_string(),
-                1 => "Notch".to_string(),
-                2 => "High-pass".to_string(),
-                _ => "ERR".to_string()
-            }
+            0 => format!("{:.3}", 100.0*self.filter.get()),
             1 => format!("{:.3}", self.frequency.get()),
             2 => format!("{:.3}", self.resonance.get()),
             3 => format!("{:.3}", 100.0*self.mix.get()),
@@ -123,7 +129,7 @@ impl PluginParameters for BasicFilterParameters
     {
         match index
         {
-            0 => (self.filter.load(Ordering::Relaxed) as f32)/2.0,
+            0 => self.filter.get(),
             1 => (self.frequency.get().log2() - MIN_FREQ.log2())/(MAX_FREQ.log2() - MIN_FREQ.log2()),
             2 => ((self.resonance.get() - MIN_RES)/(MAX_RES - MIN_RES)).powf(1.0/RES_CURVE),
             3 => self.mix.get(),
@@ -135,7 +141,7 @@ impl PluginParameters for BasicFilterParameters
     {
         match index
         {
-            0 => self.filter.store((value*2.0).round() as u8, Ordering::Relaxed),
+            0 => self.filter.set(value),
             1 => self.frequency.set((value*(MAX_FREQ.log2() - MIN_FREQ.log2()) + MIN_FREQ.log2()).exp2()),
             2 => self.resonance.set(MIN_RES + (MAX_RES - MIN_RES)*value.powf(RES_CURVE)),
             3 => self.mix.set(value),

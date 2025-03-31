@@ -4,7 +4,6 @@
 #![feature(generic_const_exprs)]
 
 use std::sync::Arc;
-use std::sync::atomic::Ordering;
 
 use num::Float;
 use real_time_fir_iir_filters::rtf::Rtf;
@@ -17,9 +16,7 @@ use self::parameters::BasicFilterParameters;
 moddef::moddef!(
     mod {
         bank,
-        filter_type,
-        parameters,
-        serde
+        parameters
     },
 );
 
@@ -40,9 +37,8 @@ impl BasicFilterPlugin
     where
         F: Float
     {
-        let filter_type = self.param.filter.load(Ordering::Relaxed);
+        let blend = self.param.blend();
         let mix = self.param.mix.get() as f64;
-
         let param = self.param.omega_zeta();
 
         for ((input_channel, output_channel), filter) in buffer.zip()
@@ -54,7 +50,11 @@ impl BasicFilterPlugin
                 .zip(output_channel.into_iter())
             {
                 let x = input_sample.to_f64().unwrap();
-                let y = filter.filter(self.rate, x)[filter_type as usize];
+                let y = filter.filter(self.rate, x)
+                    .into_iter()
+                    .zip(&blend)
+                    .map(|(y, b)| y**b)
+                    .sum::<f64>();
                 *output_sample = F::from(y*mix + x*(1.0 - mix)).unwrap();
             }
         }

@@ -1,13 +1,14 @@
-use core::{f32::consts::FRAC_1_SQRT_2, sync::atomic::Ordering};
+use core::f32::consts::FRAC_1_SQRT_2;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{filter_type::FilterType, parameters::BasicFilterParameters};
+use crate::parameters::BasicFilterParameters;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct BasicFilterBank
 {
-    pub filter: FilterType,
+    #[serde(default = "BasicFilterBank::default_filter")]
+    pub filter: f32,
     #[serde(default = "BasicFilterBank::default_frequency")]
     pub frequency: f32,
     #[serde(default = "BasicFilterBank::default_resonance")]
@@ -18,6 +19,11 @@ pub struct BasicFilterBank
 
 impl BasicFilterBank
 {
+    pub const fn default_filter() -> f32
+    {
+        0.0
+    }
+
     pub const fn default_frequency() -> f32
     {
         880.0
@@ -39,7 +45,7 @@ impl Default for BasicFilterBank
     fn default() -> Self
     {
         Self {
-            filter: FilterType::default(),
+            filter: Self::default_filter(),
             frequency: Self::default_frequency(),
             resonance: Self::default_resonance(),
             mix: Self::default_mix()
@@ -54,7 +60,7 @@ impl TryFrom<&BasicFilterParameters> for BasicFilterBank
     fn try_from(value: &BasicFilterParameters) -> Result<Self, Self::Error>
     {
         Ok(Self {
-            filter: value.filter.load(Ordering::Relaxed).try_into()?,
+            filter: value.filter.get(),
             frequency: value.frequency.get(),
             resonance: value.resonance.get(),
             mix: value.mix.get()
