@@ -1,27 +1,35 @@
 #![feature(split_array)]
+#![feature(iter_array_chunks)]
+#![feature(const_format_args)]
+#![feature(generic_const_exprs)]
 
-use core::f64::consts::FRAC_1_SQRT_2;
-use std::f64::EPSILON;
-use std::f64::consts::TAU;
 use std::sync::Arc;
-use std::sync::atomic::{Ordering, AtomicU8};
+use std::sync::atomic::Ordering;
 
 use num::Float;
-use real_time_fir_iir_filters::iir::second::{OmegaZeta, SecondOrderFilter};
 use real_time_fir_iir_filters::rtf::Rtf;
+use real_time_fir_iir_filters::{change::Change, conf::All};
+use real_time_fir_iir_filters::filters::iir::second::SecondOrderFilter;
 use vst::{prelude::*, plugin_main};
 
 use self::parameters::BasicFilterParameters;
 
-pub mod parameters;
+moddef::moddef!(
+    mod {
+        bank,
+        filter_type,
+        parameters,
+        serde
+    },
+);
 
 const CHANGE: f64 = 0.2;
 
 struct BasicFilterPlugin
 {
     pub param: Arc<BasicFilterParameters>,
-    filter: [SecondOrderFilter<f64>; CHANNEL_COUNT],
-    rate: f64
+    pub filter: [SecondOrderFilter<All, f64>; CHANNEL_COUNT],
+    pub rate: f64
 }
 
 const CHANNEL_COUNT: usize = 2;
@@ -35,14 +43,12 @@ impl BasicFilterPlugin
         let filter_type = self.param.filter.load(Ordering::Relaxed);
         let mix = self.param.mix.get() as f64;
 
-        let omega = self.param.frequency.get() as f64*TAU;
-        let zeta = 0.5/(self.param.resonance.get() as f64 + EPSILON);
+        let param = self.param.omega_zeta();
 
         for ((input_channel, output_channel), filter) in buffer.zip()
             .zip(self.filter.iter_mut())
         {
-            filter.param.omega.assign(CHANGE*omega + (1.0 - CHANGE)**filter.param.omega);
-            filter.param.zeta.assign(CHANGE*zeta + (1.0 - CHANGE)**filter.param.zeta);
+            filter.param.change(param, CHANGE);
 
             for (input_sample, output_sample) in input_channel.into_iter()
                 .zip(output_channel.into_iter())
@@ -62,14 +68,12 @@ impl Plugin for BasicFilterPlugin
     where
         Self: Sized
     {
+        let param = BasicFilterParameters::default();
+        let filter = SecondOrderFilter::new::<All>(param.omega_zeta());
+        
         BasicFilterPlugin {
-            param: Arc::new(BasicFilterParameters {
-                filter: AtomicU8::from(0),
-                frequency: AtomicFloat::from(880.0),
-                resonance: AtomicFloat::from(0.5f32.sqrt()),
-                mix: AtomicFloat::from(1.0)
-            }),
-            filter: [SecondOrderFilter::new(OmegaZeta::new(TAU*880.0, FRAC_1_SQRT_2)); CHANNEL_COUNT],
+            param: Arc::new(param),
+            filter: [filter; CHANNEL_COUNT],
             rate: 44100.0
         }
     }

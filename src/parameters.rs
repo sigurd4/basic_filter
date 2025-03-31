@@ -1,7 +1,10 @@
+use core::f64::{consts::TAU, EPSILON};
 use std::sync::atomic::{AtomicU8, Ordering};
 
-use vst::prelude::PluginParameters;
-use vst::util::AtomicFloat;
+use real_time_fir_iir_filters::param::OmegaZeta;
+use vst::{prelude::PluginParameters, util::AtomicFloat};
+
+use crate::bank::BasicFilterBank;
 
 const MIN_FREQ: f32 = 20.0;
 const MAX_FREQ: f32 = 20000.0;
@@ -9,12 +12,66 @@ const MIN_RES: f32 = 0.0;
 const RES_CURVE: f32 = 4.0;
 const MAX_RES: f32 = 20.0;
 
+#[derive(Debug)]
 pub struct BasicFilterParameters
 {
     pub filter: AtomicU8,
     pub frequency: AtomicFloat,
     pub resonance: AtomicFloat,
     pub mix: AtomicFloat
+}
+
+impl BasicFilterParameters
+{
+    pub fn store(&self, data: BasicFilterBank)
+    {
+        self.filter.store(data.filter as u8, Ordering::Relaxed);
+        self.frequency.set(data.frequency);
+        self.resonance.set(data.resonance);
+        self.mix.set(data.mix);
+    }
+
+    pub fn load(&self) -> Result<BasicFilterBank, ()>
+    {
+        self.try_into()
+    }
+
+    pub fn omega(&self) -> f64
+    {
+        self.frequency.get() as f64*TAU
+    }
+    pub fn zeta(&self) -> f64
+    {
+        0.5/(self.resonance.get() as f64 + EPSILON)
+    }
+    pub fn omega_zeta(&self) -> OmegaZeta<f64>
+    {
+        OmegaZeta {
+            omega: self.omega(),
+            zeta: self.zeta()
+        }
+    }
+}
+
+impl From<BasicFilterBank> for BasicFilterParameters
+{
+    fn from(value: BasicFilterBank) -> Self
+    {
+        let BasicFilterBank {filter, frequency, resonance, mix} = value;
+        Self {
+            filter: AtomicU8::new(filter as u8),
+            frequency: AtomicFloat::new(frequency),
+            resonance: AtomicFloat::new(resonance),
+            mix: AtomicFloat::new(mix)
+        }
+    }
+}
+impl Default for BasicFilterParameters
+{
+    fn default() -> Self
+    {
+        BasicFilterBank::default().into()
+    }
 }
 
 impl PluginParameters for BasicFilterParameters
@@ -102,37 +159,23 @@ impl PluginParameters for BasicFilterParameters
         index < 4
     }
 
-    fn get_preset_data(&self) -> Vec<u8> {
-        [
-            vec![self.filter.load(Ordering::Relaxed)],
-            self.frequency.get().to_le_bytes().to_vec(),
-            self.resonance.get().to_le_bytes().to_vec(),
-            self.mix.get().to_le_bytes().to_vec()
-        ].concat()
+    fn get_preset_data(&self) -> Vec<u8>
+    {
+        self.get_bank_data()
     }
 
-    fn get_bank_data(&self) -> Vec<u8> {
-        [
-            vec![self.filter.load(Ordering::Relaxed)],
-            self.frequency.get().to_le_bytes().to_vec(),
-            self.resonance.get().to_le_bytes().to_vec(),
-            self.mix.get().to_le_bytes().to_vec()
-        ].concat()
+    fn get_bank_data(&self) -> Vec<u8>
+    {
+        serde_json::to_vec(&self.load().expect("Serialization error")).expect("Serialization error")
     }
 
     fn load_preset_data(&self, data: &[u8])
     {
-        self.filter.store(data[0], Ordering::Relaxed);
-        self.frequency.set(f32::from_le_bytes(*data[(data.len() - 12)..].split_first_chunk().unwrap().0));
-        self.resonance.set(f32::from_le_bytes(*data[(data.len() - 8)..].split_first_chunk().unwrap().0));
-        self.mix.set(f32::from_le_bytes(*data[(data.len() - 4)..].split_first_chunk().unwrap().0));
+        self.load_bank_data(data);
     }
 
     fn load_bank_data(&self, data: &[u8])
     {
-        self.filter.store(data[0], Ordering::Relaxed);
-        self.frequency.set(f32::from_le_bytes(*data[(data.len() - 12)..].split_first_chunk().unwrap().0));
-        self.resonance.set(f32::from_le_bytes(*data[(data.len() - 8)..].split_first_chunk().unwrap().0));
-        self.mix.set(f32::from_le_bytes(*data[(data.len() - 4)..].split_first_chunk().unwrap().0));
+        self.store(serde_json::from_slice(data).expect("Deserialization error"))
     }
 }
