@@ -6,10 +6,10 @@
 use std::sync::Arc;
 
 use num::Float;
+use real_time_fir_iir_filters::filters::iir::second::SecondOrderFilter;
 use real_time_fir_iir_filters::rtf::Rtf;
 use real_time_fir_iir_filters::{change::Change, conf::All};
-use real_time_fir_iir_filters::filters::iir::second::SecondOrderFilter;
-use vst::{prelude::*, plugin_main};
+use vst::{plugin_main, prelude::*};
 
 use self::parameters::BasicFilterParameters;
 
@@ -41,21 +41,15 @@ impl BasicFilterPlugin
         let mix = self.param.mix.get() as f64;
         let param = self.param.omega_zeta();
 
-        for ((input_channel, output_channel), filter) in buffer.zip()
-            .zip(self.filter.iter_mut())
+        for ((input_channel, output_channel), filter) in buffer.zip().zip(self.filter.iter_mut())
         {
             filter.param.change(param, CHANGE);
 
-            for (input_sample, output_sample) in input_channel.into_iter()
-                .zip(output_channel.into_iter())
+            for (input_sample, output_sample) in input_channel.into_iter().zip(output_channel.into_iter())
             {
                 let x = input_sample.to_f64().unwrap();
-                let y = filter.filter(self.rate, x)
-                    .into_iter()
-                    .zip(&blend)
-                    .map(|(y, b)| y**b)
-                    .sum::<f64>();
-                *output_sample = F::from(y*mix + x*(1.0 - mix)).unwrap();
+                let y = filter.filter(self.rate, x).into_iter().zip(&blend).map(|(y, b)| y * *b).sum::<f64>();
+                *output_sample = F::from(y * mix + x * (1.0 - mix)).unwrap();
             }
         }
     }
@@ -70,7 +64,7 @@ impl Plugin for BasicFilterPlugin
     {
         let param = BasicFilterParameters::default();
         let filter = SecondOrderFilter::new::<All>(param.omega_zeta());
-        
+
         BasicFilterPlugin {
             param: Arc::new(param),
             filter: [filter; CHANNEL_COUNT],
