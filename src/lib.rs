@@ -63,7 +63,7 @@ impl Plugin for BasicFilterPlugin
         Self: Sized
     {
         let param = BasicFilterParameters::default();
-        let filter = SecondOrderFilter::new::<All>(param.omega_zeta());
+        let filter = SecondOrderFilter::new(param.omega_zeta());
 
         BasicFilterPlugin {
             param: Arc::new(param),
